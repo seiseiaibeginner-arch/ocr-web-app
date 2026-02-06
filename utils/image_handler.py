@@ -69,15 +69,21 @@ def get_image_info(uploaded_file) -> dict:
         }
 
 
-def load_image(uploaded_file) -> Optional[Image.Image]:
+def load_image(uploaded_file, max_dimension: int = 1920) -> Optional[Image.Image]:
     """
     アップロードされたファイルからPIL Imageを読み込む
+    大きな画像は自動的にリサイズしてAPI負荷を軽減
+    
+    Args:
+        uploaded_file: アップロードされたファイル
+        max_dimension: 最大辺のピクセル数（デフォルト1920px）
     
     Returns:
         Optional[Image.Image]: 読み込んだ画像、失敗時はNone
     """
     try:
         image = Image.open(uploaded_file)
+        
         # RGBに変換（透過PNGなどの対応）
         if image.mode in ('RGBA', 'LA', 'P'):
             background = Image.new('RGB', image.size, (255, 255, 255))
@@ -87,6 +93,20 @@ def load_image(uploaded_file) -> Optional[Image.Image]:
             image = background
         elif image.mode != 'RGB':
             image = image.convert('RGB')
+        
+        # 大きな画像は縮小（API負荷軽減）
+        width, height = image.size
+        if width > max_dimension or height > max_dimension:
+            # アスペクト比を維持してリサイズ
+            if width > height:
+                new_width = max_dimension
+                new_height = int(height * (max_dimension / width))
+            else:
+                new_height = max_dimension
+                new_width = int(width * (max_dimension / height))
+            
+            image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
         return image
     except Exception:
         return None
