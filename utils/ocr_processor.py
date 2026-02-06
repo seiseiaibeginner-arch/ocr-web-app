@@ -3,6 +3,7 @@
 from google import genai
 from PIL import Image
 from typing import Tuple, Optional
+import time
 from .config import GEMINI_MODEL, LANGUAGE_OPTIONS, OUTPUT_FORMAT_OPTIONS, DETAIL_OPTIONS
 
 
@@ -42,6 +43,53 @@ def build_prompt(language: str, output_format: str, detail: str) -> str:
     return base_prompt
 
 
+def call_gemini_with_retry(
+    client,
+    model: str,
+    contents: list,
+    max_retries: int = 3,
+    initial_delay: float = 2.0
+) -> Tuple[bool, any]:
+    """
+    リトライ機能付きでGemini APIを呼び出す
+    
+    Args:
+        client: Gemini クライアント
+        model: モデル名
+        contents: リクエスト内容
+        max_retries: 最大リトライ回数
+        initial_delay: 初期待機時間（秒）
+    
+    Returns:
+        Tuple[bool, any]: (成功したかどうか, レスポンスまたはエラー)
+    """
+    last_error = None
+    
+    for attempt in range(max_retries + 1):
+        try:
+            response = client.models.generate_content(
+                model=model,
+                contents=contents
+            )
+            return True, response
+        except Exception as e:
+            error_msg = str(e)
+            last_error = e
+            
+            # 429エラーまたはRESOURCE_EXHAUSTEDの場合のみリトライ
+            if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                if attempt < max_retries:
+                    # 指数バックオフ: 2秒 -> 4秒 -> 8秒
+                    wait_time = initial_delay * (2 ** attempt)
+                    time.sleep(wait_time)
+                    continue
+            
+            # その他のエラーは即座に返す
+            return False, e
+    
+    return False, last_error
+
+
 def process_ocr(
     image: Image.Image,
     api_key: str,
@@ -50,7 +98,7 @@ def process_ocr(
     detail: str = "正確な転写"
 ) -> Tuple[bool, str]:
     """
-    Gemini APIを使用してOCR処理を実行する
+    Gemini APIを使用してOCR処理を実行する（リトライ機能付き）
     
     Args:
         image: PIL Image オブジェクト
@@ -72,30 +120,56 @@ def process_ocr(
         # プロンプトを構築
         prompt = build_prompt(language, output_format, detail)
         
-        # API呼び出し
-        response = client.models.generate_content(
+        # リトライ付きでAPI呼び出し
+        success, result = call_gemini_with_retry(
+            client=client,
             model=GEMINI_MODEL,
-            contents=[prompt, image]
+            contents=[prompt, image],
+            max_retries=3,
+            initial_delay=2.0
         )
         
-        # レスポンスからテキストを抽出
-        if response and response.text:
-            return True, response.text
+        if success:
+            # レスポンスからテキストを抽出
+            if result and result.text:
+                return True, result.text
+            else:
+                return False, "画像から文字を読み取れませんでした。画像の品質を確認してください。"
         else:
-            return False, "画像から文字を読み取れませんでした。画像の品質を確認してください。"
+            # リトライ失敗後のエラー処理
+            raise result
             
     except Exception as e:
         error_message = str(e)
+        
+        # デバッグ用に詳細なエラー情報を取得
+        error_type = type(e).__name__
         
         # エラーの種類に応じたメッセージ
         if "401" in error_message or "403" in error_message:
             return False, "APIキーが無効です。正しいAPIキーを入力してください。"
         elif "429" in error_message:
-            return False, "APIのレート制限に達しました。しばらく時間をおいてから再実行してください。"
+            # レート制限の詳細を表示
+            return False, (
+                "APIのレート制限に達しました。\n\n"
+                "**考えられる原因:**\n"
+                "• 無料プランの場合: 1分あたり15リクエスト制限\n"
+                "• 画像サイズが大きすぎる可能性\n"
+                "• 短時間に多数のリクエストを送信した\n\n"
+                "**対処法:**\n"
+                "• 1-2分待ってから再試行\n"
+                "• Google AI Studioで課金設定を確認\n"
+                f"\n詳細: {error_message[:200]}"
+            )
         elif "timeout" in error_message.lower():
             return False, "APIリクエストがタイムアウトしました。再度お試しください。"
+        elif "RESOURCE_EXHAUSTED" in error_message:
+            return False, (
+                "リソースが枯渇しました。有料プランでも一時的に制限される場合があります。\n"
+                "1-2分待ってから再試行してください。"
+            )
         else:
-            return False, f"OCR処理中にエラーが発生しました: {error_message}"
+            return False, f"OCR処理中にエラーが発生しました ({error_type}): {error_message}"
 
 
 def validate_api_key(api_key: str) -> Tuple[bool, str]:
