@@ -16,7 +16,8 @@ MAX_FILE_SIZE_MB = 20
 MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024
 
 # Gemini API設定
-GEMINI_MODEL = "gemini-2.0-flash"
+# gemini-2.5-flash-lite: 高スループット・コスト効率に最適化されたモデル
+GEMINI_MODEL = "gemini-2.5-flash-lite"
 API_TIMEOUT = 60
 
 # 言語オプション
