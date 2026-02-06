@@ -175,10 +175,19 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+def get_api_key_from_secrets():
+    """SecretsからAPIキーを取得（存在する場合）"""
+    try:
+        return st.secrets.get("gemini", {}).get("api_key", "")
+    except Exception:
+        return ""
+
+
 def init_session_state():
     """セッション状態の初期化"""
     if "api_key" not in st.session_state:
-        st.session_state.api_key = ""
+        # Secretsからデフォルトキーを読み込み
+        st.session_state.api_key = get_api_key_from_secrets()
     if "ocr_results" not in st.session_state:
         st.session_state.ocr_results = {}
     if "business_card_data" not in st.session_state:
@@ -190,25 +199,32 @@ def render_sidebar():
     with st.sidebar:
         st.markdown("## ⚙️ 設定")
         
-        # APIキー入力
-        st.markdown("### 🔑 API キー")
-        api_key = st.text_input(
-            "Google Gemini API Key",
-            type="password",
-            value=st.session_state.api_key,
-            help="Google AI StudioからAPIキーを取得してください",
-            placeholder="AIza..."
-        )
-        st.session_state.api_key = api_key
+        # Secretsにキーがあるかチェック
+        has_embedded_key = bool(get_api_key_from_secrets())
         
-        if api_key:
-            is_valid, msg = validate_api_key(api_key)
-            if is_valid:
-                st.success("✅ APIキー設定済み")
-            else:
-                st.warning(f"⚠️ {msg}")
+        if has_embedded_key:
+            # 埋め込みキーがある場合は入力欄を隠す
+            st.success("✅ APIキー設定済み")
         else:
-            st.info("💡 APIキーを入力してOCRを開始")
+            # APIキー入力（埋め込みキーがない場合のみ表示）
+            st.markdown("### 🔑 API キー")
+            api_key = st.text_input(
+                "Google Gemini API Key",
+                type="password",
+                value=st.session_state.api_key,
+                help="Google AI StudioからAPIキーを取得してください",
+                placeholder="AIza..."
+            )
+            st.session_state.api_key = api_key
+            
+            if api_key:
+                is_valid, msg = validate_api_key(api_key)
+                if is_valid:
+                    st.success("✅ APIキー設定済み")
+                else:
+                    st.warning(f"⚠️ {msg}")
+            else:
+                st.info("💡 APIキーを入力してOCRを開始")
         
         st.markdown("---")
         
