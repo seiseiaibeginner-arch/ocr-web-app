@@ -43,6 +43,26 @@ st.set_page_config(
 # カスタムCSS
 st.markdown("""
 <style>
+    /* セキュリティ対策: ツールバー、フッター、外部リンクを非表示 */
+    /* GitHubアイコン、Shareボタン、ハンバーガーメニューを隠す */
+    header[data-testid="stHeader"] {
+        display: none !important;
+    }
+    /* フッター（Made with Streamlit）を隠す */
+    footer {
+        display: none !important;
+    }
+    .stDeployButton {
+        display: none !important;
+    }
+    /* Manage appボタンを隠す */
+    [data-testid="manage-app-button"] {
+        display: none !important;
+    }
+    #MainMenu {
+        visibility: hidden !important;
+    }
+    
     /* ベーススタイル */
     .main-header {
         font-size: 2.5rem;

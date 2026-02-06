@@ -10,3 +10,9 @@ maxUploadSize = 20
 
 [browser]
 gatherUsageStats = false
+
+[client]
+# ハンバーガーメニューを簡略化
+showSidebarNavigation = true
+# ツールバー（GitHubアイコン、Shareボタンなど）を非表示
+toolbarMode = "minimal"
